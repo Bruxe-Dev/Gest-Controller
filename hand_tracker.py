@@ -1,29 +1,19 @@
 """
-Hand Tracker Module
-Handles webcam input and hand landmark detection using MediaPipe
-Compatible with MediaPipe 0.10.30+
+Hand Tracker Module - Updated for MediaPipe 0.10.30+
+Handles webcam input and hand landmark detection using MediaPipe Tasks API
 """
 
 import cv2
 import numpy as np
 from typing import Optional, Tuple, List
-
-# Try to use the old API first (mp.solutions), fall back to new API (mp.tasks)
-try:
-    import mediapipe as mp
-    mp_hands = mp.solutions.hands
-    mp_drawing = mp.solutions.drawing_utils
-    USE_OLD_API = True
-except AttributeError:
-    # MediaPipe 0.10.30+ removed solutions
-    import mediapipe as mp
-    USE_OLD_API = False
-
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 
 class HandTracker:
     """Tracks hand landmarks and provides gesture detection capabilities"""
     
-    def __init__(self, max_hands=1, min_detection_confidence=0.5, min_tracking_confidence=0.5):
+    def __init__(self, max_hands=1, min_detection_confidence=0.7, min_tracking_confidence=0.5):
         """
         Initialize the hand tracker
         
@@ -32,42 +22,45 @@ class HandTracker:
             min_detection_confidence: Minimum confidence for hand detection
             min_tracking_confidence: Minimum confidence for hand tracking
         """
-        if not USE_OLD_API:
-            # MediaPipe 0.10.30+ detected - provide clear instructions
-            print("\n" + "="*70)
-            print("❌ ERROR: MediaPipe version incompatibility detected!")
-            print("="*70)
-            print("\nYour MediaPipe version (0.10.30+) removed the 'solutions' API.")
-            print("\n📥 SOLUTION: Install a compatible version of MediaPipe")
-            print("\nOption 1 - Try older version (if available):")
-            print("  pip uninstall mediapipe")
-            print("  pip install 'mediapipe<0.10.30'")
-            print("\nOption 2 - Use cvzone (alternative library):")
-            print("  pip install cvzone")
-            print("  (We'll update the code to use cvzone instead)")
-            print("\nOption 3 - Use mediapipe-legacy:")
-            print("  pip uninstall mediapipe")
-            print("  pip install mediapipe-legacy")
-            print("="*70 + "\n")
-            
-            raise RuntimeError(
-                "MediaPipe 0.10.30+ is not compatible with this code. "
-                "Please follow the instructions above to install a compatible version."
-            )
-        
-        # Use the old mp.solutions.hands API
-        self.hands = mp_hands.Hands(
-            static_image_mode=False,
-            max_num_hands=max_hands,
-            min_detection_confidence=min_detection_confidence,
+        # Create hand landmarker options
+        base_options = python.BaseOptions(model_asset_path=self._download_model())
+        options = vision.HandLandmarkerOptions(
+            base_options=base_options,
+            running_mode=vision.RunningMode.VIDEO,
+            num_hands=max_hands,
+            min_hand_detection_confidence=min_detection_confidence,
+            min_hand_presence_confidence=min_tracking_confidence,
             min_tracking_confidence=min_tracking_confidence
         )
-        self.mp_drawing = mp_drawing
-        self.mp_hands = mp_hands
+        
+        # Initialize the hand landmarker
+        self.landmarker = vision.HandLandmarker.create_from_options(options)
         
         self.results = None
         self.frame_shape = None
+        self.timestamp_ms = 0
         
+    def _download_model(self):
+        """Download the hand landmark model if needed"""
+        import urllib.request
+        import os
+        
+        model_path = "hand_landmarker.task"
+        
+        if not os.path.exists(model_path):
+            print("Downloading hand landmark model (one-time setup)...")
+            url = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+            try:
+                urllib.request.urlretrieve(url, model_path)
+                print("✓ Model downloaded successfully!")
+            except Exception as e:
+                print(f"Error downloading model: {e}")
+                print("Please download manually from:")
+                print(url)
+                raise
+        
+        return model_path
+    
     def find_hands(self, frame, draw=True):
         """
         Detect hands in the frame
@@ -79,23 +72,58 @@ class HandTracker:
         Returns:
             Processed frame with optional hand landmarks drawn
         """
-        # Convert BGR to RGB for MediaPipe
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         self.frame_shape = frame.shape
         
+        # Convert BGR to RGB for MediaPipe
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # Create MediaPipe Image
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+        
         # Process the frame
-        self.results = self.hands.process(rgb_frame)
+        self.timestamp_ms += 33  # Approximate 30 fps
+        self.results = self.landmarker.detect_for_video(mp_image, self.timestamp_ms)
         
         # Draw hand landmarks if requested
-        if draw and self.results.multi_hand_landmarks:
-            for hand_landmarks in self.results.multi_hand_landmarks:
-                self.mp_drawing.draw_landmarks(
-                    frame,
-                    hand_landmarks,
-                    self.mp_hands.HAND_CONNECTIONS
-                )
+        if draw and self.results.hand_landmarks:
+            for hand_landmarks in self.results.hand_landmarks:
+                self._draw_landmarks(frame, hand_landmarks)
         
         return frame
+    
+    def _draw_landmarks(self, frame, hand_landmarks):
+        """Draw hand landmarks on frame"""
+        h, w, _ = frame.shape
+        
+        # Convert normalized landmarks to pixel coordinates
+        landmark_list = []
+        for landmark in hand_landmarks:
+            x = int(landmark.x * w)
+            y = int(landmark.y * h)
+            landmark_list.append((x, y))
+        
+        # Draw connections
+        connections = [
+            # Thumb
+            (0, 1), (1, 2), (2, 3), (3, 4),
+            # Index finger
+            (0, 5), (5, 6), (6, 7), (7, 8),
+            # Middle finger
+            (0, 9), (9, 10), (10, 11), (11, 12),
+            # Ring finger
+            (0, 13), (13, 14), (14, 15), (15, 16),
+            # Pinky
+            (0, 17), (17, 18), (18, 19), (19, 20),
+            # Palm
+            (5, 9), (9, 13), (13, 17)
+        ]
+        
+        for start, end in connections:
+            cv2.line(frame, landmark_list[start], landmark_list[end], (0, 255, 0), 2)
+        
+        # Draw landmarks
+        for x, y in landmark_list:
+            cv2.circle(frame, (x, y), 5, (255, 0, 255), -1)
     
     def get_finger_tip_position(self, hand_index=0) -> Optional[Tuple[int, int]]:
         """
@@ -107,15 +135,15 @@ class HandTracker:
         Returns:
             (x, y) position in pixels, or None if no hand detected
         """
-        if not self.results or not self.results.multi_hand_landmarks:
+        if not self.results or not self.results.hand_landmarks:
             return None
         
-        if hand_index >= len(self.results.multi_hand_landmarks):
+        if hand_index >= len(self.results.hand_landmarks):
             return None
         
         # Index finger tip is landmark 8
-        hand_landmarks = self.results.multi_hand_landmarks[hand_index]
-        tip = hand_landmarks.landmark[8]
+        hand_landmarks = self.results.hand_landmarks[hand_index]
+        tip = hand_landmarks[8]
         
         # Convert normalized coordinates to pixel coordinates
         h, w, _ = self.frame_shape
@@ -131,17 +159,17 @@ class HandTracker:
         Returns:
             List of (x, y) positions for all landmarks, or None
         """
-        if not self.results or not self.results.multi_hand_landmarks:
+        if not self.results or not self.results.hand_landmarks:
             return None
         
-        if hand_index >= len(self.results.multi_hand_landmarks):
+        if hand_index >= len(self.results.hand_landmarks):
             return None
         
-        hand_landmarks = self.results.multi_hand_landmarks[hand_index]
+        hand_landmarks = self.results.hand_landmarks[hand_index]
         h, w, _ = self.frame_shape
         
         landmarks = []
-        for landmark in hand_landmarks.landmark:
+        for landmark in hand_landmarks:
             x = int(landmark.x * w)
             y = int(landmark.y * h)
             landmarks.append((x, y))
@@ -186,9 +214,20 @@ class HandTracker:
         
         fingers_up = 0
         
+        # Determine handedness (left or right hand)
+        # For simplicity, we'll use a basic check
+        # If wrist is left of middle finger base, it's likely right hand
+        wrist_x = landmarks[0][0]
+        middle_base_x = landmarks[9][0]
+        is_right_hand = wrist_x < middle_base_x
+        
         # Thumb - special case (horizontal check)
-        if landmarks[4][0] < landmarks[3][0]:  # Thumb tip left of thumb joint
-            fingers_up += 1
+        if is_right_hand:
+            if landmarks[4][0] > landmarks[3][0]:  # Thumb tip right of thumb joint
+                fingers_up += 1
+        else:
+            if landmarks[4][0] < landmarks[3][0]:  # Thumb tip left of thumb joint
+                fingers_up += 1
         
         # Other fingers - check if tip is above the middle joint
         finger_tips = [8, 12, 16, 20]  # Index, middle, ring, pinky tips
@@ -202,4 +241,4 @@ class HandTracker:
     
     def release(self):
         """Release resources"""
-        self.hands.close()
+        self.landmarker.close()
