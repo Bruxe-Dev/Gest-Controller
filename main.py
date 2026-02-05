@@ -20,4 +20,22 @@ class HandTracker:
         self.results =None
         self.frame_shape =None
     
-    
+    def find_hands(self,frame,draw =True):
+        #Convert to RGB for Mediapipe
+
+        rgb_frame = cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
+        self.frame_shape = frame.shape
+
+        #Result processing
+        self.results =self.hands.process(rgb_frame)
+
+            # Draw hand landmarks if requested
+        if draw and self.results.multi_hand_landmarks:
+            for hand_landmarks in self.results.multi_hand_landmarks:
+                self.mp_drawing.draw_landmarks(
+                    frame,
+                    hand_landmarks,
+                    self.mp_hands.HAND_CONNECTIONS
+                )
+        
+        return frame
