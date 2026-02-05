@@ -114,4 +114,5 @@ class GestureRecognizer:
         return None
 
     def reset(self):
-        
+        self.position_history.clear()
+        self.gesture_cooldown = 0
