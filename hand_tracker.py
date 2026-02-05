@@ -1,17 +1,29 @@
 """
 Hand Tracker Module
 Handles webcam input and hand landmark detection using MediaPipe
+Compatible with MediaPipe 0.10.30+
 """
 
 import cv2
-import mediapipe as mp
 import numpy as np
 from typing import Optional, Tuple, List
+
+# Try to use the old API first (mp.solutions), fall back to new API (mp.tasks)
+try:
+    import mediapipe as mp
+    mp_hands = mp.solutions.hands
+    mp_drawing = mp.solutions.drawing_utils
+    USE_OLD_API = True
+except AttributeError:
+    # MediaPipe 0.10.30+ removed solutions
+    import mediapipe as mp
+    USE_OLD_API = False
+
 
 class HandTracker:
     """Tracks hand landmarks and provides gesture detection capabilities"""
     
-    def __init__(self, max_hands=1, min_detection_confidence=0.7, min_tracking_confidence=0.5):
+    def __init__(self, max_hands=1, min_detection_confidence=0.5, min_tracking_confidence=0.5):
         """
         Initialize the hand tracker
         
@@ -20,16 +32,38 @@ class HandTracker:
             min_detection_confidence: Minimum confidence for hand detection
             min_tracking_confidence: Minimum confidence for hand tracking
         """
-        self.mp_hands = mp.solutions.hands
-        self.mp_drawing = mp.solutions.drawing_utils
+        if not USE_OLD_API:
+            # MediaPipe 0.10.30+ detected - provide clear instructions
+            print("\n" + "="*70)
+            print("❌ ERROR: MediaPipe version incompatibility detected!")
+            print("="*70)
+            print("\nYour MediaPipe version (0.10.30+) removed the 'solutions' API.")
+            print("\n📥 SOLUTION: Install a compatible version of MediaPipe")
+            print("\nOption 1 - Try older version (if available):")
+            print("  pip uninstall mediapipe")
+            print("  pip install 'mediapipe<0.10.30'")
+            print("\nOption 2 - Use cvzone (alternative library):")
+            print("  pip install cvzone")
+            print("  (We'll update the code to use cvzone instead)")
+            print("\nOption 3 - Use mediapipe-legacy:")
+            print("  pip uninstall mediapipe")
+            print("  pip install mediapipe-legacy")
+            print("="*70 + "\n")
+            
+            raise RuntimeError(
+                "MediaPipe 0.10.30+ is not compatible with this code. "
+                "Please follow the instructions above to install a compatible version."
+            )
         
-        # Initialize MediaPipe Hands
-        self.hands = self.mp_hands.Hands(
+        # Use the old mp.solutions.hands API
+        self.hands = mp_hands.Hands(
             static_image_mode=False,
             max_num_hands=max_hands,
             min_detection_confidence=min_detection_confidence,
             min_tracking_confidence=min_tracking_confidence
         )
+        self.mp_drawing = mp_drawing
+        self.mp_hands = mp_hands
         
         self.results = None
         self.frame_shape = None
