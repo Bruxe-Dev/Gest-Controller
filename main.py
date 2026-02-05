@@ -50,4 +50,10 @@ class HandTracker:
         hand_landmarks = self.results.multi_hand_landmarks[hand_index]
         tip = hand_landmarks.landmarks[8]
 
-        h, w, _
+        h, w, _ = self.frame_shape
+        x = int(tip.x * w)
+        y = int(tip.y * h)
+
+        return (x,y)
+
+    def get_all_landmarks(self,)
