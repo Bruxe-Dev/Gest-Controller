@@ -78,7 +78,7 @@ class GestureRecognizer:
         start = self.position_history[0]
         end = self.position_history[-1]
         
-        dy = end[1] - start[1]  # Negative = moving up (away from camera)
+        dy = end[1] - start[1]  # Negative = moving up away from camera
         
         if dy < -threshold and self.gesture_cooldown == 0:
             self.gesture_cooldown = self.cooldown_frames
