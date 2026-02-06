@@ -35,7 +35,7 @@ class HandTracker:
         model_path = "hand_landmarker.task"
         
         if not os.path.exists(model_path):
-            print("Downloading hand landmark model (one-time setup)...")
+            print("Downloading hand landmark model (one-time setup)...") 
             url = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
             try:
                 urllib.request.urlretrieve(url, model_path)
