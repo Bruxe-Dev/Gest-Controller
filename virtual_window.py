@@ -260,4 +260,4 @@ class VirtualDesktop:
     def set_status(self, message):
         """Set status message"""
         self.status_message = message
-        self.message_timer = 60  # Show for 60 frames (~2 seconds)
+        self.message_timer = 60  # Show for 60 frames (2 seconds)

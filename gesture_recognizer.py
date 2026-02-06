@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 class GestureRecognizer:
 
     
-    def __init__(self, history_size=10):
+    def __init__(self, history_size = 10):
         self.position_history = deque(maxlen=history_size)
         self.last_gesture = None
         self.gesture_cooldown = 0
