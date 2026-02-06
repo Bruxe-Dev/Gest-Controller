@@ -7,7 +7,7 @@ from virtual_window import VirtualDesktop
 class GestureControlApp:
     """Main application coordinating all components"""
     
-    def __init__(self, camera_id= 2):
+    def __init__(self, camera_id= 0):
 
         self.hand_tracker = HandTracker(max_hands=1)
         self.gesture_recognizer = GestureRecognizer(history_size=10)
